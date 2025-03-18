@@ -3,15 +3,33 @@ from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 import os
+from dotenv import load_dotenv
+import traceback
+import time
+
+# Set page config as the first Streamlit command
+st.set_page_config(page_title="Multi PDF Chatbot", page_icon=":scroll:")
 
 # **1. API Key Configuration:**
-os.environ["GOOGLE_API_KEY"] = "AIzaSyAeTPGirysrTVbGj0qwMh8Gs7DAO50BEOw"  # Replace with your actual API key
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+load_dotenv("key.env")  # Load API key from env file
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    st.error("Google API key not found. Please check your key.env file.")
+    st.stop()
+
+try:
+    genai.configure(api_key=api_key)
+except Exception as e:
+    st.error(f"Error configuring Google API: {str(e)}")
+    st.stop()
+
+# Use the stable models
+embedding_model = "models/embedding-001"
+chat_model = "gemini-1.5-pro"
 
 # **2. PDF Text Extraction (with Unicode Encoding Handling):**
 def get_pdf_text(pdf_docs):
@@ -22,79 +40,94 @@ def get_pdf_text(pdf_docs):
             try:
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text.encode("utf-8", "ignore").decode("utf-8")
-            except UnicodeEncodeError as e:
-                print(f"Unicode error: {e} - skipping problematic text.")
+                    text += page_text
+            except UnicodeEncodeError:
                 continue
     return text
 
 # **3. Text Chunking for Better Performance:**
 def get_text_chunks(text):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=200
+        chunk_size=1000,
+        chunk_overlap=100
     )
     chunks = text_splitter.split_text(text)
     return chunks
 
 # **4. Vector Store Creation:**
 def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local("faiss_index")
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
+        vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+        vector_store.save_local("faiss_index")
+        return True
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "429" in error_msg or "quota" in error_msg:
+            st.error("API limit reached. Please try again later.")
+        else:
+            st.error("Error processing files. Please try again.")
+        return False
 
-# **5. Conversational Chain for Q&A:**
-def get_conversational_chain():
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details and then add some additional points, if the answer is not in
-    provided context, don't provide the wrong answer.
-
-    Context:
-    {context}
-
-    Question:
-    {question}
-
-    Answer:
-    """
-
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
-    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-
-    return chain
-
-# **6. User Input Processing and Display:**
+# **5. User Input Processing and Display:**
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-    docs = new_db.similarity_search(user_question)
-    
-    chain = get_conversational_chain()
-    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
+        try:
+            new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+        except FileNotFoundError:
+            st.error("Please upload and process PDF files first.")
+            return
+        
+        docs = new_db.similarity_search(user_question)
+        
+        # Create the LLM
+        llm = ChatGoogleGenerativeAI(model=chat_model, temperature=0.3)
+        
+        # Prepare the context from documents
+        doc_contents = "\n\n".join([doc.page_content for doc in docs])
+        
+        # Create a prompt
+        prompt_template = """
+        Answer the question as detailed as possible from the provided context, make sure to provide all the details and then add some additional points, if the answer is not in
+        provided context, don't provide the wrong answer.
 
-    print(response)
-    st.write("Reply: ", response["output_text"])
+        Context:
+        {context}
 
-# **7. Streamlit Web Interface:**
+        Question:
+        {question}
+
+        Answer:
+        """
+        
+        # Format the prompt with the actual context and question
+        formatted_prompt = prompt_template.format(context=doc_contents, question=user_question)
+        
+        # Generate response
+        response = llm.invoke(formatted_prompt)
+        
+        # Display response
+        st.write("Reply: ", response.content)
+        
+    except Exception as e:
+        st.error("Error processing question. Please try again.")
+
+# **6. Streamlit Web Interface:**
 def main():
-    st.set_page_config("Multi PDF Chatbot", page_icon=":scroll:")
-
     # Custom background CSS
     background_path = "img/robots.jpg"
     st.markdown(f"""
     <style>
     .stApp {{
-        background-image: 'background_path';
+        background-image: url('{background_path}');
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
     }}
     </style>
 """, unsafe_allow_html=True)
-      
-    # st.markdown(page_bg_img, unsafe_allow_html=True)
-
+    
     st.header("Multi-PDF's Chatbot 🤖")
 
     user_question = st.text_input("Ask a Question from the PDF Files uploaded .. ✍️🗒")
@@ -110,11 +143,21 @@ def main():
             accept_multiple_files=True,
         )
         if st.button("Submit & Process"):
+            if not pdf_docs:
+                st.warning("Please upload at least one PDF file.")
+                return
+                
             with st.spinner("Processing..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                get_vector_store(text_chunks)
-                st.success("Done")
+                try:
+                    raw_text = get_pdf_text(pdf_docs)
+                    if not raw_text:
+                        st.error("No text could be extracted from the PDF files.")
+                        return
+                    text_chunks = get_text_chunks(raw_text)
+                    if get_vector_store(text_chunks):
+                        st.success("Done!")
+                except Exception as e:
+                    st.error("Error processing files. Please try again.")
 
         st.write("---")
 
