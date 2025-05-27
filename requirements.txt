@@ -4,5 +4,5 @@ langchain>=0.3,<0.4
 langchain-community>=0.3,<0.4
 langchain-cohere>=0.3,<0.4
 cohere>=5.12.0,<6.0
-faiss-cpu==1.7.4
+faiss-cpu==1.7.4 --only-binary :all:
 python-dotenv==1.0.1
