@@ -1,90 +1,93 @@
-# Multi-PDF-s 📚ChatApp AI Agent 🤖
+# Multi-PDF Chatbot 🤖
 
-Meet MultiPDF Chat AI App! 🚀 Chat seamlessly with Multiple PDFs using Langchain, Google Gemini Pro &amp; FAISS Vector DB with Seamless Streamlit Deployment. Get instant, Accurate responses from Awesome Google Gemini OpenSource language Model. 📚💬 Transform your PDF experience now! 🔥✨
+A powerful chatbot application that can process multiple PDF files and answer questions about their content using Cohere's AI models.
 
-## 📝 Description
-The Multi-PDF's Chat Agent is a Streamlit-based web application designed to facilitate interactive conversations with a chatbot. The app allows users to upload multiple PDF documents, extract text information from them, and train a chatbot using this extracted content. Users can then engage in real-time conversations with the chatbot.
+## Features
 
+- 📚 Process multiple PDF files simultaneously
+- 🔍 Extract and analyze text from PDFs
+- 💬 Interactive chat interface
+- 🎯 Accurate answers based on PDF content
+- 🚀 Fast and efficient processing
+- 🎨 Beautiful and responsive UI
 
-The application follows these steps to provide responses to your questions:
+## Prerequisites
 
-1. **PDF Loading** : The app reads multiple PDF documents and extracts their text content.
+- Python 3.8 or higher
+- Cohere API key (Get it from [Cohere's website](https://cohere.com/))
 
-2. **Text Chunking** : The extracted text is divided into smaller chunks that can be processed effectively.
+## Installation
 
-3. **Language Model** : The application utilizes a language model to generate vector representations (embeddings) of the text chunks.
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/multi-pdf-chatbot.git
+cd multi-pdf-chatbot
+```
 
-4. **Similarity Matching** : When you ask a question, the app compares it with the text chunks and identifies the most semantically similar ones.
+2. Install the required packages:
+```bash
+pip install -r requirements.txt
+```
 
-5. **Response Generation** : The selected chunks are passed to the language model, which generates a response based on the relevant content of the PDFs.
+3. Create a `key.env` file in the project root and add your Cohere API key:
+```
+COHERE_API_KEY=your_api_key_here
+```
 
+## Usage
 
---- 
-## 🎯 Key Features
+1. Start the application:
+```bash
+streamlit run app.py
+```
 
-- **Adaptive Chunking**: Our Sliding Window Chunking technique dynamically adjusts window size and position for RAG, balancing fine-grained and coarse-grained data access based on data complexity and context.
+2. Open your web browser and go to `http://localhost:8501`
 
-- **Multi-Document Conversational QA**: Supports simple and multi-hop queries across multiple documents simultaneously, breaking the single-document limitation.
+3. Upload your PDF files using the sidebar
 
-- **File Compatibility**: Supports both PDF and TXT file formats.
+4. Click "Submit & Process" to analyze the PDFs
 
-- **LLM Model Compatibility**: Supports Google Gemini Pro, OpenAI GPT 3, Anthropic Claude, Llama2 and other open-source LLMs.
+5. Ask questions about the content in the chat interface
 
+## Project Structure
 
+```
+multi-pdf-chatbot/
+├── app.py              # Main application file
+├── requirements.txt    # Python dependencies
+├── README.md          # Project documentation
+├── .gitignore         # Git ignore file
+└── img/              # Image assets
+```
 
+## How It Works
 
-## 🌟Requirements
+1. **PDF Processing**: The application extracts text from uploaded PDF files
+2. **Text Chunking**: Large texts are split into manageable chunks
+3. **Vector Store**: Text chunks are converted into vectors using Cohere's embeddings
+4. **Question Answering**: When you ask a question, the app:
+   - Finds relevant text chunks
+   - Uses Cohere's AI to generate accurate answers
+   - Displays the response in a user-friendly format
 
-- **Streamlit** : A Python library for building web applications with interactive elements.
-- **google-generativeai** : It is a package that provides generative AI capabilities for chatbots and virtual agents. It can be used in a variety of applications such as content generation, dialogue agents, summarization and classification systems and more.
-- **python-dotenv** : A library for loading environment variables from a `.env` file. This is commonly used to store configuration settings, API keys, and other sensitive information outside of your code.
-- **langchain** : A custom library for natural language processing tasks, including conversational retrieval, text splitting, embeddings, vector stores, chat models, and memory.
-- **PyPDF2** : PyPDF2 is a library for reading and manipulating PDF files in Python. It can be used to merge, split, and modify PDFs. In the context of a multipdf chatbot, PyPDF2 could be used to handle the manipulation and generation of PDF files based on user input or responses.
-- **faiss-cpu** : FAISS (Facebook AI Similarity Search) is a library developed by Facebook for efficient similarity search, Machine Learning Embeddings,Information Retrieval, content-based filtering and clustering of dense vectors.
-- **langchain_google_genai** : It is a package that provides an integration between LangChain and Google’s generative-ai SDK. It contains classes that extend the Embeddings class and provide methods for generating embeddings. The package can be used in a multipdf chatbot application to extract textual data from PDF documents and generate Accurate responses to user queries.
+## Technologies Used
 
-## Live Demo
-https://multi-pdf-chatbot-2meulkly5zkoyb9xqb9sup.streamlit.app/
----
+- Streamlit: Web interface
+- LangChain: Framework for LLM applications
+- Cohere: AI models for embeddings and chat
+- FAISS: Vector similarity search
+- PyPDF2: PDF text extraction
 
-## ▶️Installation
+## Contributing
 
-Clone the repository:
-https://github.com/shivanshss4536/multi-pdf-chatbot.git
+Contributions are welcome! Please feel free to submit a Pull Request.
 
+## License
 
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-Install the required Python packages:
+## Acknowledgments
 
-`pip install -r requirements.txt`
-
-Set up your Google API key from `https://makersuite.google.com/app/apikey` by creating a .env file in the root directory of the project with the following contents:
-
-`GOOGLE_API_KEY =<your-api-key-here>`
-
-Run the Streamlit app:
-
-`streamlit run app.py`
-
----
-## 💡Usage
-
-To use the Multi-PDF-s 📚ChatApp AI Agent 🤖, U can have glimpse of look by clicking on this link : To run app, fork app and follow the below steps to start using it. Use the sidebar to upload PDF files and train the chatbot. Once trained, you can have conversations with the chatbot by entering questions in the text input field.
-
-In case You want to run & implement project on your system then follow these steps:
-
-1. Ensure that you have installed the required dependencies and added the **Google API key to the `.env` file** (MUST).
-2. Run the `app.py` file using the Streamlit CLI. Execute the following command:
-   ```
-   streamlit run app.py
-   ```
-3. The application will launch in your default web browser, displaying the user interface.
-4. Upload multiple PDF documents into the app by following the provided instructions at sidebar. On the sidebar, you'll find an option to upload PDF documents. Click on the "Upload your documents here and click on Process" button and select one or more PDF files. 
-5. Don't forget to click on Submit & Process Button.
-6. Ask questions in natural language about the loaded PDFs using the chat interface.
-7. Chatting with the Documents: After uploading and processing the PDF documents, you can ask questions by typing them in the text input field. Press Enter or click the "Ask" button to submit your question.
-
-The application will use conversational AI to provide responses based on the content of the uploaded documents. The responses will be displayed in the chat interface.
-
----
-#
+- Cohere for providing the AI models
+- Streamlit for the web framework
+- LangChain for the LLM framework
