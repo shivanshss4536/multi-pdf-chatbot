@@ -4,7 +4,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import CohereEmbeddings
 from langchain_community.llms import Cohere
 from langchain_community.vectorstores import FAISS
-from langchain.prompts import PromptTemplate
 import os
 from dotenv import load_dotenv
 import traceback
@@ -41,7 +40,7 @@ def get_pdf_text(pdf_docs):
                 try:
                     page_text = page.extract_text()
                     if page_text:
-                        text += page_text
+                        text += page_text + "\n"
                 except UnicodeEncodeError:
                     continue
         except Exception as e:
@@ -51,14 +50,20 @@ def get_pdf_text(pdf_docs):
 
 def get_text_chunks(text):
     """Split text into chunks for processing."""
+    if not text.strip():
+        return []
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP
+        chunk_overlap=CHUNK_OVERLAP,
+        length_function=len,
+        separators=["\n\n", "\n", " ", ""]
     )
     return text_splitter.split_text(text)
 
 def get_vector_store(text_chunks, api_key):
     """Create and save vector store from text chunks."""
+    if not text_chunks:
+        return False
     try:
         embeddings = CohereEmbeddings(
             model=EMBEDDING_MODEL,
@@ -74,31 +79,35 @@ def get_vector_store(text_chunks, api_key):
 
 def process_user_question(user_question, api_key):
     """Process user question and generate response."""
+    if not user_question.strip():
+        st.warning("Please enter a question.")
+        return
     try:
-        # Load embeddings and vector store
         embeddings = CohereEmbeddings(
             model=EMBEDDING_MODEL,
             cohere_api_key=api_key,
             user_agent="langchain"
         )
-        
         try:
             new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
         except FileNotFoundError:
             st.error("Please upload and process PDF files first.")
             return
-        
-        # Get relevant documents
-        docs = new_db.similarity_search(user_question)
+        except Exception as e:
+            st.error(f"Error loading vector store: {str(e)}")
+            return
+        docs = new_db.similarity_search(user_question, k=3)
         doc_contents = "\n\n".join([doc.page_content for doc in docs])
-        
-        # Initialize LLM
-        llm = Cohere(cohere_api_key=api_key, model=CHAT_MODEL)
-        
-        # Create and format prompt
+        llm = Cohere(
+            cohere_api_key=api_key,
+            model=CHAT_MODEL,
+            temperature=0.7,
+            max_tokens=500
+        )
         prompt_template = """
-        Answer the question as detailed as possible from the provided context, make sure to provide all the details and then add some additional points, if the answer is not in
-        provided context, don't provide the wrong answer.
+        Answer the question as detailed as possible from the provided context. 
+        If the answer cannot be found in the context, say "I cannot find the answer in the provided context."
+        Make sure to provide all relevant details from the context.
 
         Context:
         {context}
@@ -109,68 +118,100 @@ def process_user_question(user_question, api_key):
         Answer:
         """
         formatted_prompt = prompt_template.format(context=doc_contents, question=user_question)
-        
-        # Generate and display response
-        response = llm.invoke(formatted_prompt)
-        st.write("Reply: ", response)
-        
+        with st.spinner("Generating response..."):
+            response = llm.invoke(formatted_prompt)
+            if response and response.strip():
+                st.write("Reply: ", response)
+            else:
+                st.error("Unable to generate a response. Please try again.")
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
+        st.error(traceback.format_exc())
 
 def main():
     """Main application function."""
-    # Load API key
     api_key = load_api_key()
-    
-    # Custom CSS
+
+    # CSS Styling
     st.markdown("""
         <style>
-        .stApp {
-            background-color: #f5f5f5;
-        }
+        .stApp { background-color: #18191A !important; }
+        .main, .block-container { background-color: #18191A !important; color: #F5F6FA !important; }
         .stButton>button {
             width: 100%;
+            background: linear-gradient(90deg, #4CAF50 0%, #00b894 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            border: none;
+        }
+        .stTextInput>div>div>input {
+            border-radius: 8px;
+            background-color: #242526;
+            color: #F5F6FA;
+            font-size: 1.1rem;
+            padding: 10px;
+        }
+        .css-1d391kg { padding: 1.5rem; }
+        .sidebar .sidebar-content { background-color: #23272F !important; color: #F5F6FA !important; }
+        h1, h2, h3, h4, h5, h6, .stTitle { color: #F5F6FA !important; }
+        .header-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #00b894;
+            margin-bottom: 0.5rem;
+        }
+        .header-subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            color: #b2bec3;
+            margin-bottom: 1.5rem;
         }
         </style>
     """, unsafe_allow_html=True)
-    
-    # Header
-    st.header("Multi-PDF's Chatbot 🤖")
-    
-    # Main chat interface
-    user_question = st.text_input("Ask a Question from the PDF Files uploaded .. ✍️🗒")
-    if user_question:
-        process_user_question(user_question, api_key)
-    
-    # Sidebar
+
+    # App Header
+    st.markdown("<div class='header-title'>Multi-PDF Chatbot 🤖</div>", unsafe_allow_html=True)
+    st.markdown("<div class='header-subtitle'>Chat with your PDFs in style. Upload, process, and ask anything!</div>", unsafe_allow_html=True)
+    st.write("---")
+
+    # Chat input
+    with st.container():
+        st.markdown("<div class='chat-card'>", unsafe_allow_html=True)
+        user_question = st.text_input("Ask a question about your PDFs:", key="user_input")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Sidebar upload and process
     with st.sidebar:
-        st.title("📁 PDF File's Section")
-        pdf_docs = st.file_uploader(
-            "Upload your PDF Files & Click on the Submit & Process Button",
-            accept_multiple_files=True,
-            type=['pdf']
-        )
-        
-        if st.button("Submit & Process"):
+        st.image("img/robots.jpg", width=300)
+        st.title("📁 PDF Files")
+        pdf_docs = st.file_uploader("Upload your PDF files", accept_multiple_files=True, type=['pdf'])
+        if st.button("Process PDFs", key="process_button"):
             if not pdf_docs:
                 st.warning("Please upload at least one PDF file.")
                 return
-            
-            with st.spinner("Processing..."):
+            with st.spinner("Processing PDFs..."):
                 try:
-                    # Process PDFs
                     raw_text = get_pdf_text(pdf_docs)
                     if not raw_text:
                         st.error("No text could be extracted from the PDF files.")
                         return
-                    
-                    # Create vector store
                     text_chunks = get_text_chunks(raw_text)
                     if get_vector_store(text_chunks, api_key):
                         st.success("PDFs processed successfully!")
-                        
+                    else:
+                        st.error("Failed to process PDFs.")
                 except Exception as e:
                     st.error(f"Error processing files: {str(e)}")
+                    st.error(traceback.format_exc())
+
+    if user_question:
+        process_user_question(user_question, api_key)
 
 if __name__ == "__main__":
     main()
