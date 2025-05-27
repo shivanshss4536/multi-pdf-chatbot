@@ -1,7 +1,8 @@
 streamlit==1.32.0
 PyPDF2==3.0.1
-langchain==0.1.12
-langchain-community==0.0.27
-cohere==4.47
+langchain>=0.3,<0.4
+langchain-community>=0.3,<0.4
+langchain-cohere>=0.3,<0.4
+cohere>=5.12.0,<6.0
 faiss-cpu==1.7.4
 python-dotenv==1.0.1

@@ -1,8 +1,7 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import CohereEmbeddings
-from langchain_community.llms import Cohere
+from langchain_cohere import CohereEmbeddings, ChatCohere
 from langchain_community.vectorstores import FAISS
 import os
 from dotenv import load_dotenv
@@ -22,7 +21,6 @@ st.set_page_config(
 )
 
 def load_api_key():
-    """Load and validate the Cohere API key."""
     load_dotenv("key.env")
     api_key = os.getenv("COHERE_API_KEY")
     if not api_key:
@@ -31,7 +29,6 @@ def load_api_key():
     return api_key
 
 def get_pdf_text(pdf_docs):
-    """Extract text from PDF documents."""
     text = ""
     for pdf in pdf_docs:
         try:
@@ -49,7 +46,6 @@ def get_pdf_text(pdf_docs):
     return text
 
 def get_text_chunks(text):
-    """Split text into chunks for processing."""
     if not text.strip():
         return []
     text_splitter = RecursiveCharacterTextSplitter(
@@ -61,14 +57,12 @@ def get_text_chunks(text):
     return text_splitter.split_text(text)
 
 def get_vector_store(text_chunks, api_key):
-    """Create and save vector store from text chunks."""
     if not text_chunks:
         return False
     try:
         embeddings = CohereEmbeddings(
             model=EMBEDDING_MODEL,
-            cohere_api_key=api_key,
-            user_agent="langchain"
+            cohere_api_key=api_key
         )
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
@@ -78,15 +72,13 @@ def get_vector_store(text_chunks, api_key):
         return False
 
 def process_user_question(user_question, api_key):
-    """Process user question and generate response."""
     if not user_question.strip():
         st.warning("Please enter a question.")
         return
     try:
         embeddings = CohereEmbeddings(
             model=EMBEDDING_MODEL,
-            cohere_api_key=api_key,
-            user_agent="langchain"
+            cohere_api_key=api_key
         )
         try:
             new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
@@ -96,9 +88,11 @@ def process_user_question(user_question, api_key):
         except Exception as e:
             st.error(f"Error loading vector store: {str(e)}")
             return
+
         docs = new_db.similarity_search(user_question, k=3)
         doc_contents = "\n\n".join([doc.page_content for doc in docs])
-        llm = Cohere(
+
+        llm = ChatCohere(
             cohere_api_key=api_key,
             model=CHAT_MODEL,
             temperature=0.7,
@@ -107,7 +101,6 @@ def process_user_question(user_question, api_key):
         prompt_template = """
         Answer the question as detailed as possible from the provided context. 
         If the answer cannot be found in the context, say "I cannot find the answer in the provided context."
-        Make sure to provide all relevant details from the context.
 
         Context:
         {context}
@@ -120,19 +113,20 @@ def process_user_question(user_question, api_key):
         formatted_prompt = prompt_template.format(context=doc_contents, question=user_question)
         with st.spinner("Generating response..."):
             response = llm.invoke(formatted_prompt)
-            if response and response.strip():
-                st.write("Reply: ", response)
+            if response and response.content.strip():
+             st.write("Reply: ", response.content)
             else:
-                st.error("Unable to generate a response. Please try again.")
+             st.error("Unable to generate a response. Please try again.")
+
+            
+            
     except Exception as e:
         st.error(f"Error processing question: {str(e)}")
         st.error(traceback.format_exc())
 
 def main():
-    """Main application function."""
     api_key = load_api_key()
 
-    # CSS Styling
     st.markdown("""
         <style>
         .stApp { background-color: #18191A !important; }
@@ -175,21 +169,18 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    # App Header
     st.markdown("<div class='header-title'>Multi-PDF Chatbot 🤖</div>", unsafe_allow_html=True)
     st.markdown("<div class='header-subtitle'>Chat with your PDFs in style. Upload, process, and ask anything!</div>", unsafe_allow_html=True)
     st.write("---")
 
-    # Chat input
     with st.container():
         st.markdown("<div class='chat-card'>", unsafe_allow_html=True)
         user_question = st.text_input("Ask a question about your PDFs:", key="user_input")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Sidebar upload and process
     with st.sidebar:
         st.image("img/robots.jpg", width=300)
-        st.title("📁 PDF Files")
+        st.title("PDF Files")
         pdf_docs = st.file_uploader("Upload your PDF files", accept_multiple_files=True, type=['pdf'])
         if st.button("Process PDFs", key="process_button"):
             if not pdf_docs:
