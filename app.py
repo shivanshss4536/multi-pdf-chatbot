@@ -9,7 +9,8 @@ import traceback
 
 # Constants
 EMBEDDING_MODEL = "embed-english-v3.0"
-CHAT_MODEL = "command"
+# Default chat model; can be overridden by COHERE_CHAT_MODEL env var
+CHAT_MODEL = "command-a-03-2025"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 100
 
@@ -71,6 +72,32 @@ def get_vector_store(text_chunks, api_key):
         st.error(f"Error creating vector store: {str(e)}")
         return False
 
+def _invoke_with_fallback(api_key, preferred_model, prompt):
+    # Try a sequence of known supported models in case of deprecations
+    candidate_models = []
+    if preferred_model:
+        candidate_models.append(preferred_model)
+    candidate_models.extend([
+        "command-a-03-2025",
+        "command-a"
+    ])
+
+    last_error = None
+    for model_name in candidate_models:
+        try:
+            llm = ChatCohere(
+                cohere_api_key=api_key,
+                model=model_name,
+                temperature=0.7,
+                max_tokens=500
+            )
+            return llm.invoke(prompt), model_name
+        except Exception as e:
+            last_error = e
+            # Try next model on 404/removed or any invocation error
+            continue
+    raise last_error if last_error else RuntimeError("All Cohere model attempts failed.")
+
 def process_user_question(user_question, api_key):
     if not user_question.strip():
         st.warning("Please enter a question.")
@@ -92,12 +119,8 @@ def process_user_question(user_question, api_key):
         docs = new_db.similarity_search(user_question, k=3)
         doc_contents = "\n\n".join([doc.page_content for doc in docs])
 
-        llm = ChatCohere(
-            cohere_api_key=api_key,
-            model=CHAT_MODEL,
-            temperature=0.7,
-            max_tokens=500
-        )
+        # Allow overriding the model via environment variable after dotenv load
+        preferred_model = os.getenv("COHERE_CHAT_MODEL") or CHAT_MODEL
         prompt_template = """
         Answer the question as detailed as possible from the provided context. 
         If the answer cannot be found in the context, say "I cannot find the answer in the provided context."
@@ -112,11 +135,16 @@ def process_user_question(user_question, api_key):
         """
         formatted_prompt = prompt_template.format(context=doc_contents, question=user_question)
         with st.spinner("Generating response..."):
-            response = llm.invoke(formatted_prompt)
-            if response and response.content.strip():
-             st.write("Reply: ", response.content)
+            try:
+                response, used_model = _invoke_with_fallback(api_key, preferred_model, formatted_prompt)
+            except Exception as e:
+                st.error(f"Error generating response: {str(e)}")
+                st.info("Try setting COHERE_CHAT_MODEL to a supported model like 'command-a-03-2025'.")
+                return
+            if response and getattr(response, "content", "").strip():
+                st.write("Reply: ", response.content)
             else:
-             st.error("Unable to generate a response. Please try again.")
+                st.error("Unable to generate a response. Please try again.")
 
             
             
